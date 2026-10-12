@@ -1,0 +1,3 @@
+python-dotenv==1.2.4
+roboflow==1.7.1
+ultralytics==8.4.175
