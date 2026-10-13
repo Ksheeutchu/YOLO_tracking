@@ -63,7 +63,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", default="0",
                          help="0 for webcam, or path to a video file")
-    parser.add_argument("--weights", default="yolov8n.pt",
+    parser.add_argument("--weights", default="yolov8m.pt",
                          help="model weights; swap to your custom .pt later")
     parser.add_argument("--conf", type=float, default=0.4,
                          help="confidence threshold")
