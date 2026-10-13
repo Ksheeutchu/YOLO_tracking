@@ -18,6 +18,9 @@ Install:
     pip install ultralytics opencv-python
 """
 
+import json
+from datetime import datetime
+from pathlib import Path
 import argparse
 from collections import defaultdict
 
@@ -39,6 +42,22 @@ def side_of_line(point, line_p1, line_p2):
     (x, y), (x1, y1), (x2, y2) = point, line_p1, line_p2
     return (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1)
 
+def counter_path(folder="counters"):
+    Path(folder).mkdir(exist_ok=True)
+    return Path(folder) / f"counter for {datetime.now():%d.%m.%Y}.json"
+
+
+def load_counters():
+    path = counter_path()
+    if path.exists():
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    return {"in": 0, "out": 0, "by_class": {}}
+
+
+def save_counters(data):
+    with open(counter_path(), "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -72,9 +91,7 @@ def main():
 
     # track_id -> last known side of the line (+1 / -1)
     last_side = {}
-    count_in = 0   # crossed left -> right
-    count_out = 0  # crossed right -> left
-    count_by_class = defaultdict(int)  # class name -> total crossings
+    data = load_counters()
 
     while True:
         ok, frame = cap.read()
@@ -107,14 +124,14 @@ def main():
 
                 prev = last_side.get(tid)
                 if prev is not None and prev != side_sign:
-                    if side_sign > 0:
-                        count_in += 1
-                    else:
-                        count_out += 1
-                    count_by_class[model.names[cls_id]] += 1
+                    direction = "in" if side_sign > 0 else "out"
+                    data[direction] += 1
+                    entry = data["by_class"].setdefault(
+                        model.names[cls_id], {"in": 0, "out": 0})
+                    entry[direction] += 1
                 last_side[tid] = side_sign
 
-                label = f"#{tid} {model.names[cls_id]} {conf:.2f}"
+                label = f"{model.names[cls_id]} {conf:.2f}"
                 box_color = (0, 200, 255)      # amber/orange, BGR
                 text_color = (0, 0, 0)         # black text
                 text_bg = (0, 200, 255)        # filled label background
@@ -132,7 +149,7 @@ def main():
 
         cv2.line(frame, line_p1, line_p2, (0, 0, 255), 3)
 
-        counter_text = f"IN: {count_in}  OUT: {count_out}"
+        counter_text = f"IN: {data['in']}  OUT: {data['out']}"
         (ctw, cth), _ = cv2.getTextSize(counter_text, cv2.FONT_HERSHEY_SIMPLEX,
                                          1.4, 3)
         cv2.rectangle(frame, (10, 10), (10 + ctw + 20, 10 + cth + 30),
@@ -140,10 +157,10 @@ def main():
         cv2.putText(frame, counter_text, (20, 10 + cth + 12),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.4, (255, 255, 255), 3)
 
-        if count_by_class:
+        if data["by_class"]:
             font, scale, thick = cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2
-            lines = [f"{name} - {n}" for name, n in
-                     sorted(count_by_class.items())]
+            lines = [f"{name} - IN {c['in']}  OUT {c['out']}"
+                     for name, c in sorted(data["by_class"].items())]
             line_h = 34
             panel_w = max(cv2.getTextSize(t, font, scale, thick)[0][0]
                            for t in lines) + 20
@@ -163,9 +180,10 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
-    print(f"Final counts -> IN: {count_in}, OUT: {count_out}")
-    for name, n in sorted(count_by_class.items()):
-        print(f"  {name} - {n}")
+    print(f"Final counts -> IN: {data['in']}, OUT: {data['out']}")
+    for name, c in sorted(data["by_class"].items()):
+        print(f"  {name} - IN {c['in']}, OUT {c['out']}")
+    save_counters(data)
 
 
 if __name__ == "__main__":
