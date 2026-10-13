@@ -19,6 +19,8 @@ Install:
 """
 
 import argparse
+from collections import defaultdict
+
 import cv2
 import torch
 from ultralytics import YOLO
@@ -72,6 +74,7 @@ def main():
     last_side = {}
     count_in = 0   # crossed left -> right
     count_out = 0  # crossed right -> left
+    count_by_class = defaultdict(int)  # class name -> total crossings
 
     while True:
         ok, frame = cap.read()
@@ -108,6 +111,7 @@ def main():
                         count_in += 1
                     else:
                         count_out += 1
+                    count_by_class[model.names[cls_id]] += 1
                 last_side[tid] = side_sign
 
                 label = f"#{tid} {model.names[cls_id]} {conf:.2f}"
@@ -136,6 +140,23 @@ def main():
         cv2.putText(frame, counter_text, (20, 10 + cth + 12),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.4, (255, 255, 255), 3)
 
+        if count_by_class:
+            font, scale, thick = cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2
+            lines = [f"{name} - {n}" for name, n in
+                     sorted(count_by_class.items())]
+            line_h = 34
+            panel_w = max(cv2.getTextSize(t, font, scale, thick)[0][0]
+                           for t in lines) + 20
+            panel_h = line_h * len(lines) + 16
+            panel_top = frame_h - panel_h - 10
+
+            cv2.rectangle(frame, (10, panel_top),
+                          (10 + panel_w, frame_h - 10), (0, 0, 0), -1)
+            for i, text in enumerate(lines):
+                y = panel_top + (i + 1) * line_h - 6
+                cv2.putText(frame, text, (20, y), font, scale,
+                            (255, 255, 255), thick)
+
         cv2.imshow("Detection + Counting", frame)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
@@ -143,6 +164,8 @@ def main():
     cap.release()
     cv2.destroyAllWindows()
     print(f"Final counts -> IN: {count_in}, OUT: {count_out}")
+    for name, n in sorted(count_by_class.items()):
+        print(f"  {name} - {n}")
 
 
 if __name__ == "__main__":
