@@ -63,8 +63,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", default="0",
                          help="0 for webcam, or path to a video file")
-    parser.add_argument("--weights", default="yolov8m.pt",
-                         help="model weights; swap to your custom .pt later")
+    parser.add_argument("--weights", default="yolov8m",
+                         help="model name (yolov8n / yolov8s / yolov8m) "
+                              "from the models folder, or a path to a .pt file")
     parser.add_argument("--conf", type=float, default=0.4,
                          help="confidence threshold")
     parser.add_argument("--classes", type=int, nargs="*", default=None,
@@ -78,7 +79,12 @@ def main():
     device = pick_device()
     print(f"Using device: {device}")
 
-    model = YOLO(args.weights)
+    weights = Path(args.weights)
+    if weights.suffix != ".pt":                 # short name like "yolov8s"
+        weights = Path(__file__).parent / "models" / f"{args.weights}.pt"
+    if not weights.exists():
+        raise FileNotFoundError(f"Model file not found: {weights}")
+    model = YOLO(str(weights))
 
     cap = cv2.VideoCapture(source)
     if not cap.isOpened():
