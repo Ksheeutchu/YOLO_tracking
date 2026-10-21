@@ -20,9 +20,11 @@ import torchvision  # noqa: F401  (ultralytics imports this lazily on the first 
                     # its import chain is deep, so do it here on the main thread)
 from PySide6.QtCore import QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import (QApplication, QComboBox, QHBoxLayout, QLabel,
-                               QMainWindow, QMessageBox, QPushButton,
-                               QSizePolicy, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QComboBox, QDialog,
+                               QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit,
+                               QListWidget, QListWidgetItem, QMainWindow,
+                               QMessageBox, QPushButton, QSizePolicy,
+                               QVBoxLayout, QWidget)
 
 from counting_engine import CountingEngine
 
@@ -57,6 +59,70 @@ class VideoWorker(QThread):
                          QImage.Format.Format_RGB888).copy()   # copy: own the memory
             self.frame_ready.emit(img)
         self.engine.stop()
+
+
+class ClassDialog(QDialog):
+    """Checklist of the model's object classes, with a search box."""
+
+    def __init__(self, names, selected, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Objects to detect")
+        self.setMinimumSize(360, 480)
+
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search...")
+        self.search.textChanged.connect(self.filter_items)
+
+        self.list = QListWidget()
+        for class_id, name in sorted(names.items()):
+            item = QListWidgetItem(name)
+            item.setData(Qt.ItemDataRole.UserRole, class_id)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            checked = selected is None or class_id in selected
+            item.setCheckState(Qt.CheckState.Checked if checked
+                               else Qt.CheckState.Unchecked)
+            self.list.addItem(item)
+
+        select_all = QPushButton("Select all")
+        select_all.clicked.connect(lambda: self.set_all(Qt.CheckState.Checked))
+        clear_all = QPushButton("Clear all")
+        clear_all.clicked.connect(lambda: self.set_all(Qt.CheckState.Unchecked))
+        quick_row = QHBoxLayout()
+        quick_row.addWidget(select_all)
+        quick_row.addWidget(clear_all)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
+                                   QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.validate)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.search)
+        layout.addLayout(quick_row)
+        layout.addWidget(self.list)
+        layout.addWidget(buttons)
+
+    def filter_items(self, text):
+        text = text.strip().lower()
+        for i in range(self.list.count()):
+            item = self.list.item(i)
+            item.setHidden(text not in item.text().lower())
+
+    def set_all(self, state):
+        for i in range(self.list.count()):
+            self.list.item(i).setCheckState(state)
+
+    def selected_ids(self):
+        return [self.list.item(i).data(Qt.ItemDataRole.UserRole)
+                for i in range(self.list.count())
+                if self.list.item(i).checkState() == Qt.CheckState.Checked]
+
+    def validate(self):
+        if not self.selected_ids():
+            QMessageBox.warning(self, "Objects to detect",
+                                "Select at least one object.")
+            return
+        self.accept()
 
 
 MODEL_NAMES = ["yolov8n", "yolov8s", "yolov8m"]     # nano / small / medium
@@ -113,6 +179,12 @@ class MainWindow(QMainWindow):
         top_bar = QHBoxLayout()
         top_bar.addWidget(QLabel("Model:"))
         top_bar.addWidget(self.model_combo)
+
+        self.classes_button = QPushButton()
+        self.classes_button.clicked.connect(self.choose_classes)
+        self.update_classes_button()
+        top_bar.addWidget(self.classes_button)
+
         top_bar.addStretch(1)
         top_bar.addWidget(self.clock_label)
 
@@ -173,7 +245,10 @@ class MainWindow(QMainWindow):
         try:
             self.engine.load_model(weights)
             self._model_index = index
-            self.statusBar().showMessage(f"Model: {name}", 4000)
+            self.engine.classes = None               # class ids differ between models
+            self.update_classes_button()
+            self.statusBar().showMessage(
+                f"Model: {name} (objects reset to all)", 4000)
         except Exception as e:
             self.model_combo.blockSignals(True)      # go back without re-triggering
             self.model_combo.setCurrentIndex(self._model_index)
@@ -184,6 +259,28 @@ class MainWindow(QMainWindow):
             QApplication.restoreOverrideCursor()
             self.model_combo.setEnabled(True)
             self.start_button.setEnabled(True)
+
+    # ---- objects to detect ----------------------------------------------
+    def update_classes_button(self):
+        names = self.engine.model.names
+        selected = self.engine.classes
+        if selected is None:
+            self.classes_button.setText("Objects: all")
+            self.classes_button.setToolTip("Detecting every class of this model")
+        else:
+            self.classes_button.setText(f"Objects: {len(selected)} of {len(names)}")
+            self.classes_button.setToolTip(
+                ", ".join(names[c] for c in sorted(selected)))
+
+    def choose_classes(self):
+        names = self.engine.model.names
+        dialog = ClassDialog(names, self.engine.classes, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        ids = dialog.selected_ids()
+        # all ticked = no filter at all (None); takes effect on the next frame
+        self.engine.classes = None if len(ids) == len(names) else ids
+        self.update_classes_button()
 
     # ---- counters -------------------------------------------------------
     def reset_counters(self):
