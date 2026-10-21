@@ -10,6 +10,7 @@ Install:
 """
 
 import argparse
+import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ import cv2
 import torch
 import torchvision  # noqa: F401  (ultralytics imports this lazily on the first frame;
                     # its import chain is deep, so do it here on the main thread)
-from PySide6.QtCore import QSize, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QSettings, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (QApplication, QComboBox, QDialog,
                                QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit,
@@ -129,9 +130,10 @@ MODEL_NAMES = ["yolov8n", "yolov8s", "yolov8m"]     # nano / small / medium
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, engine, start_weights="yolov8m"):
+    def __init__(self, engine, settings, start_weights="yolov8m"):
         super().__init__()
         self.engine = engine
+        self.settings = settings
         self.worker = None
 
         self.setWindowTitle("Detection + Counting")
@@ -247,6 +249,8 @@ class MainWindow(QMainWindow):
             self._model_index = index
             self.engine.classes = None               # class ids differ between models
             self.update_classes_button()
+            self.settings.setValue("model", weights)
+            self.settings.setValue("class_names", "[]")      # [] = all objects
             self.statusBar().showMessage(
                 f"Model: {name} (objects reset to all)", 4000)
         except Exception as e:
@@ -281,6 +285,10 @@ class MainWindow(QMainWindow):
         # all ticked = no filter at all (None); takes effect on the next frame
         self.engine.classes = None if len(ids) == len(names) else ids
         self.update_classes_button()
+        # remembered by NAME (ids differ between models); [] = all objects
+        chosen = [] if self.engine.classes is None else [names[c] for c in sorted(ids)]
+        self.settings.setValue("class_names", json.dumps(chosen))
+        self.settings.setValue("model", self.model_combo.currentData())   # classes belong to this model
 
     # ---- counters -------------------------------------------------------
     def reset_counters(self):
@@ -331,8 +339,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", default="0",
                         help="0 for webcam, or path to a video file")
-    parser.add_argument("--weights", default="yolov8m",
-                        help="yolov8n / yolov8s / yolov8m, or a path to a .pt file")
+    parser.add_argument("--weights", default=None,
+                        help="yolov8n / yolov8s / yolov8m, or a path to a .pt file "
+                             "(default: last used model, else yolov8m)")
     parser.add_argument("--conf", type=float, default=0.4)
     parser.add_argument("--classes", type=int, nargs="*", default=None)
     parser.add_argument("--line", type=float, default=0.5)
@@ -345,13 +354,38 @@ def main():
     args = parser.parse_args()
 
     source = int(args.source) if args.source.isdigit() else args.source
-    engine = CountingEngine(source=source, weights=args.weights,
-                            conf=args.conf, classes=args.classes,
-                            line=args.line, cam_size=(args.width, args.height),
-                            mirror=not args.no_mirror)
+
+    # remembered choices from the last session (command-line arguments win)
+    settings = QSettings("ConveyorPartCounter", "CountingApp")
+    saved_model = settings.value("model", "", type=str)
+
+    def build_engine(weights):
+        return CountingEngine(source=source, weights=weights,
+                              conf=args.conf, classes=args.classes,
+                              line=args.line, cam_size=(args.width, args.height),
+                              mirror=not args.no_mirror)
+
+    weights = args.weights or saved_model or "yolov8m"
+    try:
+        engine = build_engine(weights)
+    except FileNotFoundError:
+        if args.weights:                             # explicitly requested: report it
+            raise
+        weights = "yolov8m"                          # saved model no longer exists
+        engine = build_engine(weights)
+
+    if args.classes is None and weights == saved_model:
+        try:
+            saved_names = json.loads(settings.value("class_names", "[]", type=str))
+        except ValueError:
+            saved_names = []
+        names = engine.model.names
+        ids = [cid for cid, name in names.items() if name in saved_names]
+        if ids and len(ids) < len(names):
+            engine.classes = ids
 
     app = QApplication(sys.argv)
-    window = MainWindow(engine, start_weights=args.weights)
+    window = MainWindow(engine, settings, start_weights=weights)
     window.show()
     sys.exit(app.exec())
 
