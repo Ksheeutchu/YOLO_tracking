@@ -126,7 +126,16 @@ class ClassDialog(QDialog):
         self.accept()
 
 
-MODEL_NAMES = ["yolov8n", "yolov8s", "yolov8m"]     # nano / small / medium
+BUILTIN_MODELS = ["yolov8n", "yolov8s", "yolov8m"]   # nano / small / medium
+
+
+def list_models():
+    """All .pt files in models/: the built-in ones first, then your own."""
+    models_dir = Path(__file__).parent / "models"
+    found = sorted(p.stem for p in models_dir.glob("*.pt"))
+    builtin = [n for n in BUILTIN_MODELS if n in found]
+    custom = [n for n in found if n not in BUILTIN_MODELS]
+    return builtin + custom   # nano / small / medium
 
 
 class MainWindow(QMainWindow):
@@ -168,10 +177,8 @@ class MainWindow(QMainWindow):
 
         # model selector (only usable while the video is stopped)
         self.model_combo = QComboBox()
-        models_dir = Path(__file__).parent / "models"
-        for name in MODEL_NAMES:
-            if (models_dir / f"{name}.pt").exists():
-                self.model_combo.addItem(name, name)
+        for name in list_models():
+            self.model_combo.addItem(name, name)
         if self.model_combo.findData(start_weights) < 0:     # custom .pt path from --weights
             self.model_combo.addItem(Path(start_weights).stem, start_weights)
         self.model_combo.setCurrentIndex(self.model_combo.findData(start_weights))
