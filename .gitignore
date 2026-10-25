@@ -9,3 +9,5 @@ conveyor-part-detection-2/
 .DS_Store
 counters/
 models/
+Plates_detection-1/
+download_dataset.py
