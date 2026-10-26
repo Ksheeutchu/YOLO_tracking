@@ -11,3 +11,4 @@ counters/
 models/
 Plates_detection-1/
 download_dataset.py
+webcam_capture/
