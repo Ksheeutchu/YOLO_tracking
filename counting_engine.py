@@ -241,12 +241,12 @@ class CountingEngine:
         """Small legend at the bottom of the counting line."""
         if LEFT_TO_RIGHT_IS_IN:
             rows = [("COUNTING LINE", (0, 0, 255)),
-                    ("left -> right: IN", (255, 255, 255)),
-                    ("right -> left: OUT", (255, 255, 255))]
+                    ("left -> right: IN+", (255, 255, 255)),
+                    ("right -> left: OUT-", (255, 255, 255))]
         else:
             rows = [("COUNTING LINE", (0, 0, 255)),
-                    ("right -> left: IN", (255, 255, 255)),
-                    ("left -> right: OUT", (255, 255, 255))]
+                    ("right -> left: IN+", (255, 255, 255)),
+                    ("left -> right: OUT-", (255, 255, 255))]
 
         font, scale, thick = cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2
         row_h = 30
@@ -269,7 +269,7 @@ class CountingEngine:
         cv2.line(frame, self.line_p1, self.line_p2, (0, 0, 255), 3)
         self._draw_line_label(frame)
 
-        counter_text = f"IN: {data['in']}  OUT: {data['out']}"
+        counter_text = f"IN+: {data['in']}  OUT-: {data['out']}"
         (ctw, cth), _ = cv2.getTextSize(counter_text,
                                          cv2.FONT_HERSHEY_SIMPLEX, 1.4, 3)
         cv2.rectangle(frame, (10, 10), (10 + ctw + 20, 10 + cth + 30),

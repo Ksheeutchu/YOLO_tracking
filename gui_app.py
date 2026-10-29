@@ -67,11 +67,11 @@ class ClassDialog(QDialog):
 
     def __init__(self, names, selected, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Objects to detect")
+        self.setWindowTitle("Выберите детали")
         self.setMinimumSize(360, 480)
 
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search...")
+        self.search.setPlaceholderText("Поиск...")
         self.search.textChanged.connect(self.filter_items)
 
         self.list = QListWidget()
@@ -84,9 +84,9 @@ class ClassDialog(QDialog):
                                else Qt.CheckState.Unchecked)
             self.list.addItem(item)
 
-        select_all = QPushButton("Select all")
+        select_all = QPushButton("Выбрать все")
         select_all.clicked.connect(lambda: self.set_all(Qt.CheckState.Checked))
-        clear_all = QPushButton("Clear all")
+        clear_all = QPushButton("Очистить все")
         clear_all.clicked.connect(lambda: self.set_all(Qt.CheckState.Unchecked))
         quick_row = QHBoxLayout()
         quick_row.addWidget(select_all)
@@ -120,8 +120,8 @@ class ClassDialog(QDialog):
 
     def validate(self):
         if not self.selected_ids():
-            QMessageBox.warning(self, "Objects to detect",
-                                "Select at least one object.")
+            QMessageBox.warning(self, "Детали для отслеживания",
+                                "Выберите хотя бы одну деталь")
             return
         self.accept()
 
@@ -145,24 +145,24 @@ class MainWindow(QMainWindow):
         self.settings = settings
         self.worker = None
 
-        self.setWindowTitle("Detection + Counting")
+        self.setWindowTitle("Определение и учет деталей")
 
-        self.video_label = QLabel("Press Start")
+        self.video_label = QLabel("Начните работу")
         self.video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.video_label.setMinimumSize(640, 480)
+        self.video_label.setMinimumSize(960, 540)
         self.video_label.setSizePolicy(QSizePolicy.Policy.Ignored,
                                        QSizePolicy.Policy.Ignored)
         self.video_label.setStyleSheet("background-color: black; color: white;")
 
-        self.start_button = QPushButton("Start")
+        self.start_button = QPushButton("Начать")
         self.start_button.setMinimumHeight(40)
         self.start_button.clicked.connect(self.toggle)
 
-        self.reset_button = QPushButton("Reset counter")
+        self.reset_button = QPushButton("Сбросить счетчик")
         self.reset_button.setMinimumHeight(40)
         self.reset_button.clicked.connect(self.reset_counters)
 
-        self.save_button = QPushButton("Save data")
+        self.save_button = QPushButton("Сохранить данные")
         self.save_button.setMinimumHeight(40)
         self.save_button.clicked.connect(self.save_data)
 
@@ -186,7 +186,7 @@ class MainWindow(QMainWindow):
         self.model_combo.currentIndexChanged.connect(self.on_model_changed)
 
         top_bar = QHBoxLayout()
-        top_bar.addWidget(QLabel("Model:"))
+        top_bar.addWidget(QLabel("Установка:"))
         top_bar.addWidget(self.model_combo)
 
         self.classes_button = QPushButton()
@@ -226,7 +226,7 @@ class MainWindow(QMainWindow):
         self.worker.error.connect(self.show_error)
         self.worker.finished.connect(self.on_worker_finished)
         self.worker.start()
-        self.start_button.setText("Stop")
+        self.start_button.setText("Остановить")
         self.model_combo.setEnabled(False)
 
     def stop_video(self):
@@ -237,8 +237,8 @@ class MainWindow(QMainWindow):
     def on_worker_finished(self):
         self.worker = None
         self.video_label.clear()                    # drop the last frame
-        self.video_label.setText("Press Start")
-        self.start_button.setText("Start")
+        self.video_label.setText("Начните работу")
+        self.start_button.setText("Начать")
         self.start_button.setEnabled(True)
         self.model_combo.setEnabled(True)
 
@@ -248,7 +248,7 @@ class MainWindow(QMainWindow):
         name = self.model_combo.itemText(index)
         self.model_combo.setEnabled(False)
         self.start_button.setEnabled(False)
-        self.statusBar().showMessage(f"Loading {name}...")
+        self.statusBar().showMessage(f"Загружается {name}...")
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         QApplication.processEvents()                 # show the message before loading
         try:
@@ -259,13 +259,13 @@ class MainWindow(QMainWindow):
             self.settings.setValue("model", weights)
             self.settings.setValue("class_names", "[]")      # [] = all objects
             self.statusBar().showMessage(
-                f"Model: {name} (objects reset to all)", 4000)
+                f"Установка: {name} (остлеживаются все детали)", 4000)
         except Exception as e:
             self.model_combo.blockSignals(True)      # go back without re-triggering
             self.model_combo.setCurrentIndex(self._model_index)
             self.model_combo.blockSignals(False)
             self.statusBar().clearMessage()
-            self.show_error(f"Could not load model {name}: {e}")
+            self.show_error(f"Не удалось загрузить установку {name}: {e}")
         finally:
             QApplication.restoreOverrideCursor()
             self.model_combo.setEnabled(True)
@@ -276,10 +276,10 @@ class MainWindow(QMainWindow):
         names = self.engine.model.names
         selected = self.engine.classes
         if selected is None:
-            self.classes_button.setText("Objects: all")
+            self.classes_button.setText("Детали: все")
             self.classes_button.setToolTip("Detecting every class of this model")
         else:
-            self.classes_button.setText(f"Objects: {len(selected)} of {len(names)}")
+            self.classes_button.setText(f"Выбрано: {len(selected)} из {len(names)} деталей")
             self.classes_button.setToolTip(
                 ", ".join(names[c] for c in sorted(selected)))
 
@@ -300,21 +300,21 @@ class MainWindow(QMainWindow):
     # ---- counters -------------------------------------------------------
     def reset_counters(self):
         answer = QMessageBox.question(
-            self, "Reset counter",
-            "Set all counters to zero?\n\n"
-            "The saved file for today is not changed until you press "
-            "Save data (or close the app, which also saves).")
+            self, "Сбросить счетчик",
+            "Сбросить все подсчеты?\n\n"
+            "Файл, сохраненный за сегодня не изменится, пока вы не нажмете "
+            "'Сохранить данные' (или не закроете приложение, что также сохраняет данные автоматически).")
         if answer == QMessageBox.StandardButton.Yes:
             self.engine.reset_counters()
-            self.statusBar().showMessage("Counters reset", 4000)
+            self.statusBar().showMessage("Подсчет сброшен", 4000)
 
     def save_data(self):
         try:
             path = self.engine.save()
         except Exception as e:
-            self.show_error(f"Could not save: {e}")
+            self.show_error(f"Не удалось сохранить: {e}")
             return
-        self.statusBar().showMessage(f"Saved to {path}", 5000)
+        self.statusBar().showMessage(f"Сохранено в {path}", 5000)
 
     # ---- display --------------------------------------------------------
     def show_frame(self, img):
@@ -331,7 +331,7 @@ class MainWindow(QMainWindow):
         self.video_label.setPixmap(pix)
 
     def show_error(self, message):
-        QMessageBox.critical(self, "Error", message)
+        QMessageBox.critical(self, "Ошибка", message)
 
     # ---- closing --------------------------------------------------------
     def closeEvent(self, event):
